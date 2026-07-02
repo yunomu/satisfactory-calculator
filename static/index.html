@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <script src="./main.js"></script>
+        <title>Satisfactory recipes</title>
+    </head>
+    <body>
+        <main id="app"></main>
+<script>
+    var app = Elm.Main.init({
+        node: document.getElementById("app"),
+        flags: {
+            "recipes": "./recipes.csv",
+            "items": "./items.csv"
+        }
+    });
+    window.addEventListener("scroll", () => {
+        app.ports.scrollY.send(window.scrollY);
+    });
+</script>
+    </body>
+</html>
