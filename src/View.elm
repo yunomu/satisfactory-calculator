@@ -371,18 +371,15 @@ viewRecipes toMsg products recipes =
         ]
 
 
-viewIO : (Msg -> msg) -> Int -> List RecipeView -> Element msg
-viewIO toMsg scrollY recipes =
+viewIO : (Msg -> msg) -> List RecipeView -> Element msg
+viewIO toMsg recipes =
     let
         ( output, input ) =
             List.map (\r -> ( r.selected, r.multiple )) recipes
                 |> Recipe.summary
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.paddingEach { edges | top = scrollY }
-        , Element.alignTop
-        , Element.spacing 10
+        [ Element.spacing 10
         ]
         [ Element.text "副産物・必要資源"
         , Element.row [ Element.spacing 15 ]
@@ -403,6 +400,12 @@ view toMsg model =
             , Element.spacing 10
             ]
             [ Lazy.lazy3 viewRecipes toMsg model.products model.recipes
-            , Lazy.lazy3 viewIO toMsg model.scrollY model.recipes
+            , Element.el
+                [ Element.width Element.fill
+                , Element.paddingEach { edges | top = model.scrollY }
+                , Element.alignTop
+                ]
+              <|
+                Lazy.lazy2 viewIO toMsg model.recipes
             ]
         ]
