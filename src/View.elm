@@ -394,7 +394,11 @@ view : (Msg -> msg) -> Model -> Element msg
 view toMsg model =
     Element.column
         [ Element.paddingXY 15 10 ]
-        [ Element.el [ Border.widthEach { edges | bottom = 1 } ] <| Element.text "Satisfactory計算機"
+        [ Element.el [ Border.widthEach { edges | bottom = 1 } ] <|
+            Element.link []
+                { url = "./"
+                , label = Element.text "Satisfactory計算機"
+                }
         , Element.row
             [ Element.paddingXY 0 5
             , Element.spacing 10
