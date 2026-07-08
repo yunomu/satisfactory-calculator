@@ -24,11 +24,18 @@ import Task
 import View.Atom.Button as B
 
 
+type Direction
+    = Produce
+    | Consume
+    | None
+
+
 type Msg
-    = SelectProduct Int String
+    = SelectProduct Int Direction String
     | SelectRecipe Int String
     | ChangeMultiple Int Float
-    | AddRecipe String
+    | ChangeDirection Int Direction
+    | AddRecipe Direction String
     | RemoveRecipe Int
     | ClearRecipes
     | OnScrollY Int
@@ -39,6 +46,7 @@ type alias RecipeView =
     , recipes : List Recipe
     , multiple : Float
     , selected : Recipe
+    , direction : Direction
     }
 
 
@@ -50,6 +58,7 @@ errorRecipe =
 type alias Model =
     { products : List String
     , productMap : Dict String (List Recipe)
+    , sourceMap : Dict String (List Recipe)
     , recipes : List RecipeView
     , scrollY : Int
     }
@@ -57,36 +66,36 @@ type alias Model =
 
 empty : Model
 empty =
-    Model [] Dict.empty [] 0
+    { products = []
+    , productMap = Dict.empty
+    , sourceMap = Dict.empty
+    , recipes = []
+    , scrollY = 0
+    }
 
 
-init : (Msg -> msg) -> Dict String (List Recipe) -> ( Model, Cmd msg )
-init toMsg productMap =
+init : (Msg -> msg) -> List Recipe -> ( Model, Cmd msg )
+init toMsg recipes =
     let
+        productMap =
+            Recipe.mkProductMap recipes
+
+        sourceMap =
+            Recipe.mkSourceMap recipes
+
         products =
             Dict.keys productMap
 
         selectedProduct =
             List.head products |> Maybe.withDefault ""
-
-        initRecipes =
-            Dict.get selectedProduct productMap
-                |> Lib.maybe []
-                    (\r ->
-                        [ { item = selectedProduct
-                          , recipes = Lib.getDefault [] selectedProduct productMap
-                          , multiple = 1
-                          , selected = errorRecipe
-                          }
-                        ]
-                    )
     in
     ( { products = products
       , productMap = productMap
-      , recipes = initRecipes
+      , sourceMap = sourceMap
+      , recipes = []
       , scrollY = 0
       }
-    , Lib.perform <| toMsg <| SelectProduct 0 selectedProduct
+    , Lib.perform <| toMsg <| AddRecipe Produce selectedProduct
     )
 
 
@@ -124,10 +133,21 @@ removeIndex i list =
 update : (Msg -> msg) -> Msg -> Model -> ( Model, Cmd msg )
 update toMsg msg model =
     case msg of
-        SelectProduct idx product ->
+        SelectProduct idx dir product ->
             let
+                map =
+                    case dir of
+                        Produce ->
+                            model.productMap
+
+                        Consume ->
+                            model.sourceMap
+
+                        _ ->
+                            Dict.empty
+
                 filteredRecipes =
-                    Lib.getDefault [] product model.productMap
+                    Lib.getDefault [] product map
             in
             ( { model
                 | recipes =
@@ -136,6 +156,7 @@ update toMsg msg model =
                             { r
                                 | item = product
                                 , recipes = filteredRecipes
+                                , multiple = 1
                             }
                         )
                         model.recipes
@@ -168,20 +189,45 @@ update toMsg msg model =
             , Cmd.none
             )
 
-        AddRecipe product ->
+        AddRecipe direction product ->
             ( { model
                 | recipes =
-                    case Dict.get product model.productMap of
-                        Nothing ->
-                            model.recipes
+                    model.recipes ++ [ RecipeView product [] 1 errorRecipe direction ]
+              }
+            , Lib.perform <| toMsg <| ChangeDirection (List.length model.recipes) direction
+            )
 
-                        Just rs ->
+        ChangeDirection idx dir ->
+            ( { model
+                | recipes =
+                    updateIndex idx
+                        (\r ->
                             let
+                                map =
+                                    case dir of
+                                        Produce ->
+                                            model.productMap
+
+                                        Consume ->
+                                            model.sourceMap
+
+                                        _ ->
+                                            Dict.empty
+
+                                rs =
+                                    Lib.getDefault [] r.item map
+
                                 selected =
                                     List.head rs
                                         |> Maybe.withDefault errorRecipe
                             in
-                            model.recipes ++ [ RecipeView product rs 1 selected ]
+                            { r
+                                | direction = dir
+                                , selected = selected
+                                , recipes = rs
+                            }
+                        )
+                        model.recipes
               }
             , Cmd.none
             )
@@ -237,8 +283,8 @@ select attrs arg =
         ]
 
 
-viewItem : (Msg -> msg) -> Bool -> Float -> Float -> Item -> Element msg
-viewItem toMsg isSum mul duration item =
+viewItem : (Msg -> msg) -> Direction -> Float -> Float -> Item -> Element msg
+viewItem toMsg direction mul duration item =
     Element.row
         [ Element.spacing 5 ]
         [ Element.column
@@ -249,7 +295,7 @@ viewItem toMsg isSum mul duration item =
             ]
             [ Element.text item.name
             , Element.row [ Element.width Element.fill ]
-                [ if isSum then
+                [ if direction /= None then
                     Element.none
 
                   else
@@ -260,8 +306,8 @@ viewItem toMsg isSum mul duration item =
                             ++ "/分"
                 ]
             ]
-        , if isSum then
-            B.button (toMsg <| AddRecipe item.name) "+"
+        , if direction /= None then
+            B.button (toMsg <| AddRecipe direction item.name) "+"
 
           else
             Element.none
@@ -319,9 +365,18 @@ viewRecipe toMsg products idx arg =
             [ Border.widthEach { edges | top = 1 }
             , Element.padding 5
             ]
-            [ Element.row [ Element.width Element.fill ]
-                [ select []
-                    { onChange = toMsg << SelectProduct idx
+            [ Element.row [ Element.width Element.fill, Element.spacing 15 ]
+                [ Input.radioRow [ Element.spacing 10 ]
+                    { onChange = toMsg << ChangeDirection idx
+                    , options =
+                        [ Input.option Produce <| Element.text "制作"
+                        , Input.option Consume <| Element.text "消費"
+                        ]
+                    , selected = Just arg.direction
+                    , label = Input.labelHidden "制作区分"
+                    }
+                , select []
+                    { onChange = toMsg << SelectProduct idx arg.direction
                     , options = List.map (\p -> ( p, p, p == arg.item )) products
                     , label = "アイテム"
                     }
@@ -336,7 +391,7 @@ viewRecipe toMsg products idx arg =
                 , Element.el [ Element.alignRight ] <| viewMul toMsg idx arg.multiple
                 ]
             , Element.row [ Element.spacing 5 ]
-                [ Element.column [] <| List.map (viewItem toMsg False arg.multiple arg.selected.duration) arg.selected.output
+                [ Element.column [] <| List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.output
                 , Element.text "←"
                 , Element.column [ Element.width (px 180) ]
                     [ Element.el [ Element.centerX ] <| Element.text arg.selected.equip
@@ -347,7 +402,7 @@ viewRecipe toMsg products idx arg =
                     [ Element.spacing 3
                     ]
                   <|
-                    List.map (viewItem toMsg False arg.multiple arg.selected.duration) arg.selected.input
+                    List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.input
                 ]
             ]
 
@@ -383,9 +438,9 @@ viewIO toMsg recipes =
         ]
         [ Element.text "副産物・必要資源"
         , Element.row [ Element.spacing 15 ]
-            [ Element.column [] <| List.map (\i -> viewItem toMsg True 1 60 i) output
+            [ Element.column [] <| List.map (\i -> viewItem toMsg Consume 1 60 i) output
             , Element.text "←"
-            , Element.column [] <| List.map (\i -> viewItem toMsg True 1 60 i) input
+            , Element.column [] <| List.map (\i -> viewItem toMsg Produce 1 60 i) input
             ]
         ]
 

@@ -3,6 +3,8 @@ module Recipe exposing
     , ProcessType(..)
     , Recipe
     , build
+    , mkProductMap
+    , mkSourceMap
     , perMin
     , summary
     )
@@ -138,8 +140,8 @@ sortRecipes =
                         compare a.name b.name
 
 
-mkProductMap : List Recipe -> Dict String (List Recipe)
-mkProductMap =
+mkMap : (Recipe -> List Item) -> List Recipe -> Dict String (List Recipe)
+mkMap target =
     Dict.map (\k v -> sortRecipes v)
         << List.foldl
             (\dicta dictb ->
@@ -152,15 +154,24 @@ mkProductMap =
                     Dict.empty
             )
             Dict.empty
-        << List.concatMap (\r -> List.map (\o -> Dict.singleton o.name [ r ]) r.output)
+        << List.concatMap (\r -> List.map (\o -> Dict.singleton o.name [ r ]) <| target r)
 
 
-build : String -> String -> Result String (Dict String (List Recipe))
+mkProductMap : List Recipe -> Dict String (List Recipe)
+mkProductMap =
+    mkMap <| \r -> r.output
+
+
+mkSourceMap : List Recipe -> Dict String (List Recipe)
+mkSourceMap =
+    mkMap <| \r -> r.input
+
+
+build : String -> String -> Result String (List Recipe)
 build recipesCsv itemsCsv =
     Result.map2 construct
         (Builder.build recipeBuilder recipesCsv)
         (Builder.build itemsBuilder itemsCsv)
-        |> Result.map mkProductMap
 
 
 perMin : Float -> Float -> Float
