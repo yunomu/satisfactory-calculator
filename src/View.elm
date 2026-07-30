@@ -76,8 +76,9 @@ type alias Model msg =
     , scrollY : Int
     , toMsg : Msg -> msg
     , renderGraph : String -> String -> msg
-    , graph : String
     , mode : Mode
+    , input : List Item
+    , output : List Item
     }
 
 
@@ -90,8 +91,9 @@ empty toMsg =
     , scrollY = 0
     , toMsg = toMsg
     , renderGraph = \id -> toMsg << NopRenderGraph id
-    , graph = "flowchart TD"
     , mode = RecipeMode
+    , input = []
+    , output = []
     }
 
 
@@ -122,8 +124,9 @@ init msgs recipes =
       , scrollY = 0
       , toMsg = msgs.toMsg
       , renderGraph = msgs.renderGraph
-      , graph = "flowchart TD"
       , mode = RecipeMode
+      , input = []
+      , output = []
       }
     , Lib.perform <| msgs.toMsg <| AddRecipe Produce selectedProduct
     )
@@ -286,8 +289,21 @@ update msg model =
 
         UpdateRecipes ->
             let
+                ( output, input ) =
+                    List.map (\r -> ( r.selected, r.multiple )) model.recipes
+                        |> Recipe.summary
+            in
+            ( { model
+                | input = input
+                , output = output
+              }
+            , Cmd.none
+            )
+
+        ChangeMode mode ->
+            let
                 label =
-                    String.filter (\c -> c /= '・')
+                    String.filter (\c -> not <| List.member c [ '・', '（', '）', ' ', '(', ')' ])
 
                 items =
                     model.recipes
@@ -299,7 +315,7 @@ update msg model =
                         |> List.map (\i -> String.concat [ label i, "([", i, "])" ])
 
                 equipLabel r =
-                    String.concat [ label r.equip, ":", label r.name ]
+                    String.concat [ label r.equip, "_", label r.name ]
 
                 equips =
                     model.recipes
@@ -347,17 +363,65 @@ update msg model =
                                 List.map (inputEdge equip mul r.duration) r.input
                                     ++ List.map (outputEdge equip mul r.duration) r.output
                             )
-            in
-            ( { model
-                | graph = String.join "\n" <| "flowchart BT" :: items ++ equips ++ procs
-              }
-            , Cmd.none
-            )
 
-        ChangeMode mode ->
+                srcs =
+                    model.input
+                        |> List.concatMap
+                            (\i ->
+                                let
+                                    item =
+                                        label i.name
+
+                                    startLabel =
+                                        "start_" ++ item
+                                in
+                                [ startLabel ++ "(( ))"
+                                , String.concat
+                                    [ startLabel
+                                    , "--->|"
+                                    , String.fromFloat i.amount
+                                    , "|"
+                                    , item
+                                    ]
+                                ]
+                            )
+
+                surplus =
+                    model.output
+                        |> List.concatMap
+                            (\i ->
+                                let
+                                    item =
+                                        label i.name
+
+                                    stopLabel =
+                                        "stop_" ++ item
+                                in
+                                [ stopLabel ++ "((( )))"
+                                , String.concat
+                                    [ item
+                                    , "--->|"
+                                    , String.fromFloat i.amount
+                                    , "|"
+                                    , stopLabel
+                                    ]
+                                ]
+                            )
+
+                graph =
+                    String.join "\n" <|
+                        "flowchart BT"
+                            :: List.concat
+                                [ items
+                                , equips
+                                , procs
+                                , surplus
+                                , srcs
+                                ]
+            in
             ( { model | mode = mode }
             , if mode == GraphMode then
-                Lib.perform <| model.renderGraph graphId model.graph
+                Lib.perform <| model.renderGraph graphId graph
 
               else
                 Cmd.none
@@ -538,13 +602,8 @@ viewRecipes toMsg products recipes =
         ]
 
 
-viewIO : (Msg -> msg) -> List RecipeView -> Element msg
-viewIO toMsg recipes =
-    let
-        ( output, input ) =
-            List.map (\r -> ( r.selected, r.multiple )) recipes
-                |> Recipe.summary
-    in
+viewIO : (Msg -> msg) -> List Item -> List Item -> Element msg
+viewIO toMsg input output =
     Element.column
         [ Element.spacing 10
         ]
@@ -593,15 +652,16 @@ view toMsg model =
                         , Element.alignTop
                         ]
                       <|
-                        Lazy.lazy2 viewIO toMsg model.recipes
+                        Lazy.lazy3 viewIO toMsg model.input model.output
                     ]
 
             GraphMode ->
-                Element.column
+                Element.el
                     [ Element.width Element.fill
                     , Element.paddingXY 0 5
                     , Element.spacing 10
                     ]
-                    [ Element.html <| Html.div [ Attr.id graphId, Attr.style "width" "100%" ] []
-                    ]
+                <|
+                    Element.html <|
+                        Html.div [ Attr.id graphId, Attr.style "width" "100%" ] []
         ]
