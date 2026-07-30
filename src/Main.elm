@@ -14,6 +14,9 @@ import View
 port scrollY : (Int -> msg) -> Sub msg
 
 
+port renderGraph : ( String, String ) -> Cmd msg
+
+
 type alias Flags =
     { recipes : String
     , items : String
@@ -22,7 +25,7 @@ type alias Flags =
 
 type alias Model =
     { flags : Flags
-    , viewModel : View.Model
+    , viewModel : View.Model Msg
     }
 
 
@@ -31,6 +34,7 @@ type Msg
     | FetchItemsCSV String (Result Http.Error String)
     | ViewMsg View.Msg
     | OnScrollY Int
+    | RenderGraph String String
 
 
 httpGet : (Result Http.Error String -> msg) -> String -> Cmd msg
@@ -44,7 +48,7 @@ httpGet toMsg url =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { flags = flags
-      , viewModel = View.empty
+      , viewModel = View.empty ViewMsg
       }
     , Cmd.batch
         [ httpGet FetchRecipesCSV flags.recipes
@@ -80,7 +84,7 @@ update msg model =
                 Ok recipes ->
                     let
                         ( viewModel, cmd ) =
-                            View.init ViewMsg recipes
+                            View.init { toMsg = ViewMsg, renderGraph = RenderGraph } recipes
                     in
                     ( { model
                         | viewModel = viewModel
@@ -94,7 +98,7 @@ update msg model =
         ViewMsg viewMsg ->
             let
                 ( viewModel, cmd ) =
-                    View.update ViewMsg viewMsg model.viewModel
+                    View.update viewMsg model.viewModel
             in
             ( { model | viewModel = viewModel }
             , cmd
@@ -103,11 +107,14 @@ update msg model =
         OnScrollY y ->
             let
                 ( viewModel, cmd ) =
-                    View.update ViewMsg (View.OnScrollY y) model.viewModel
+                    View.update (View.OnScrollY y) model.viewModel
             in
             ( { model | viewModel = viewModel }
             , cmd
             )
+
+        RenderGraph id graph ->
+            ( model, renderGraph ( id, graph ) )
 
 
 subscriptions : Model -> Sub Msg
@@ -115,7 +122,7 @@ subscriptions model =
     scrollY OnScrollY
 
 
-view_ : View.Model -> Element Msg
+view_ : View.Model Msg -> Element Msg
 view_ =
     View.view ViewMsg
 

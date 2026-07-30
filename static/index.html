@@ -7,7 +7,10 @@
     </head>
     <body>
         <main id="app"></main>
-<script>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true });
+
     var app = Elm.Main.init({
         node: document.getElementById("app"),
         flags: {
@@ -17,6 +20,10 @@
     });
     window.addEventListener("scroll", () => {
         app.ports.scrollY.send(window.scrollY);
+    });
+    app.ports.renderGraph.subscribe(async ([id, def]) => {
+        const { svg } = await mermaid.render('mermaid-svg', def);
+        document.getElementById(id).innerHTML = svg;
     });
 </script>
     </body>

@@ -30,6 +30,11 @@ type Direction
     | None
 
 
+type Mode
+    = RecipeMode
+    | GraphMode
+
+
 type Msg
     = SelectProduct Int Direction String
     | SelectRecipe Int String
@@ -39,6 +44,9 @@ type Msg
     | RemoveRecipe Int
     | ClearRecipes
     | OnScrollY Int
+    | NopRenderGraph String String
+    | UpdateRecipes
+    | ChangeMode Mode
 
 
 type alias RecipeView =
@@ -50,32 +58,50 @@ type alias RecipeView =
     }
 
 
+graphId : String
+graphId =
+    "mermaid-container"
+
+
 errorRecipe : Recipe
 errorRecipe =
     Recipe "" "" 0 [] []
 
 
-type alias Model =
+type alias Model msg =
     { products : List String
     , productMap : Dict String (List Recipe)
     , sourceMap : Dict String (List Recipe)
     , recipes : List RecipeView
     , scrollY : Int
+    , toMsg : Msg -> msg
+    , renderGraph : String -> String -> msg
+    , graph : String
+    , mode : Mode
     }
 
 
-empty : Model
-empty =
+empty : (Msg -> msg) -> Model msg
+empty toMsg =
     { products = []
     , productMap = Dict.empty
     , sourceMap = Dict.empty
     , recipes = []
     , scrollY = 0
+    , toMsg = toMsg
+    , renderGraph = \id -> toMsg << NopRenderGraph id
+    , graph = "flowchart TD"
+    , mode = RecipeMode
     }
 
 
-init : (Msg -> msg) -> List Recipe -> ( Model, Cmd msg )
-init toMsg recipes =
+init :
+    { toMsg : Msg -> msg
+    , renderGraph : String -> String -> msg
+    }
+    -> List Recipe
+    -> ( Model msg, Cmd msg )
+init msgs recipes =
     let
         productMap =
             Recipe.mkProductMap recipes
@@ -94,8 +120,12 @@ init toMsg recipes =
       , sourceMap = sourceMap
       , recipes = []
       , scrollY = 0
+      , toMsg = msgs.toMsg
+      , renderGraph = msgs.renderGraph
+      , graph = "flowchart TD"
+      , mode = RecipeMode
       }
-    , Lib.perform <| toMsg <| AddRecipe Produce selectedProduct
+    , Lib.perform <| msgs.toMsg <| AddRecipe Produce selectedProduct
     )
 
 
@@ -130,8 +160,8 @@ removeIndex i list =
             []
 
 
-update : (Msg -> msg) -> Msg -> Model -> ( Model, Cmd msg )
-update toMsg msg model =
+update : Msg -> Model msg -> ( Model msg, Cmd msg )
+update msg model =
     case msg of
         SelectProduct idx dir product ->
             let
@@ -161,7 +191,7 @@ update toMsg msg model =
                         )
                         model.recipes
               }
-            , maybeCmd (Lib.perform << toMsg << SelectRecipe idx) <|
+            , maybeCmd (Lib.perform << model.toMsg << SelectRecipe idx) <|
                 Maybe.map (\r -> r.name) <|
                     List.head filteredRecipes
             )
@@ -179,14 +209,14 @@ update toMsg msg model =
                         )
                         model.recipes
               }
-            , Cmd.none
+            , Lib.perform <| model.toMsg UpdateRecipes
             )
 
         ChangeMultiple idx s ->
             ( { model
                 | recipes = updateIndex idx (\r -> { r | multiple = r.multiple + s }) model.recipes
               }
-            , Cmd.none
+            , Lib.perform <| model.toMsg UpdateRecipes
             )
 
         AddRecipe direction product ->
@@ -194,7 +224,7 @@ update toMsg msg model =
                 | recipes =
                     model.recipes ++ [ RecipeView product [] 1 errorRecipe direction ]
               }
-            , Lib.perform <| toMsg <| ChangeDirection (List.length model.recipes) direction
+            , Lib.perform <| model.toMsg <| ChangeDirection (List.length model.recipes) direction
             )
 
         ChangeDirection idx dir ->
@@ -229,7 +259,7 @@ update toMsg msg model =
                         )
                         model.recipes
               }
-            , Cmd.none
+            , Lib.perform <| model.toMsg UpdateRecipes
             )
 
         RemoveRecipe idx ->
@@ -238,17 +268,99 @@ update toMsg msg model =
 
               else
                 { model | recipes = removeIndex idx model.recipes }
-            , Cmd.none
+            , Lib.perform <| model.toMsg UpdateRecipes
             )
 
         ClearRecipes ->
             ( { model | recipes = List.take 1 model.recipes }
-            , Cmd.none
+            , Lib.perform <| model.toMsg UpdateRecipes
             )
 
         OnScrollY y ->
             ( { model | scrollY = y }
             , Cmd.none
+            )
+
+        NopRenderGraph _ _ ->
+            ( model, Cmd.none )
+
+        UpdateRecipes ->
+            let
+                label =
+                    String.filter (\c -> c /= '・')
+
+                items =
+                    model.recipes
+                        |> List.map (\r -> r.selected)
+                        |> List.concatMap (\r -> r.input ++ r.output)
+                        |> List.map (\i -> i.name)
+                        |> Set.fromList
+                        |> Set.toList
+                        |> List.map (\i -> String.concat [ label i, "([", i, "])" ])
+
+                equipLabel r =
+                    String.concat [ label r.equip, ":", label r.name ]
+
+                equips =
+                    model.recipes
+                        |> List.map (\r -> ( r.selected, r.multiple ))
+                        |> List.map
+                            (\( r, mul ) ->
+                                String.concat
+                                    [ equipLabel r
+                                    , "[\""
+                                    , r.equip
+                                    , "("
+                                    , String.fromFloat mul
+                                    , ")"
+                                    , "\"]"
+                                    ]
+                            )
+
+                inputEdge eq mul d item =
+                    String.concat
+                        [ label item.name
+                        , "--->|"
+                        , String.fromFloat <| Recipe.perMin item.amount d * mul
+                        , "|"
+                        , eq
+                        ]
+
+                outputEdge eq mul d item =
+                    String.concat
+                        [ eq
+                        , "--->|"
+                        , String.fromFloat <| Recipe.perMin item.amount d * mul
+                        , "|"
+                        , label item.name
+                        ]
+
+                procs =
+                    model.recipes
+                        |> List.map (\r -> ( r.selected, r.multiple ))
+                        |> List.concatMap
+                            (\( r, mul ) ->
+                                let
+                                    equip =
+                                        equipLabel r
+                                in
+                                List.map (inputEdge equip mul r.duration) r.input
+                                    ++ List.map (outputEdge equip mul r.duration) r.output
+                            )
+            in
+            ( { model
+                | graph = String.join "\n" <| "flowchart BT" :: items ++ equips ++ procs
+              }
+            , Cmd.none
+            )
+
+        ChangeMode mode ->
+            ( { model | mode = mode }
+            , if mode == GraphMode then
+                Lib.perform <| model.renderGraph graphId model.graph
+
+              else
+                Cmd.none
             )
 
 
@@ -445,26 +557,51 @@ viewIO toMsg recipes =
         ]
 
 
-view : (Msg -> msg) -> Model -> Element msg
+view : (Msg -> msg) -> Model msg -> Element msg
 view toMsg model =
     Element.column
-        [ Element.paddingXY 15 10 ]
+        [ Element.paddingXY 15 10
+        , Element.spacing 10
+        , Element.width Element.fill
+        ]
         [ Element.el [ Border.widthEach { edges | bottom = 1 } ] <|
             Element.link []
                 { url = "./"
                 , label = Element.text "Satisfactory計算機"
                 }
-        , Element.row
-            [ Element.paddingXY 0 5
-            , Element.spacing 10
+        , Input.radioRow
+            [ Element.spacing 10
             ]
-            [ Lazy.lazy3 viewRecipes toMsg model.products model.recipes
-            , Element.el
-                [ Element.width Element.fill
-                , Element.paddingEach { edges | top = model.scrollY }
-                , Element.alignTop
+            { onChange = model.toMsg << ChangeMode
+            , options =
+                [ Input.option RecipeMode <| Element.text "レシピ編集"
+                , Input.option GraphMode <| Element.text "グラフ表示"
                 ]
-              <|
-                Lazy.lazy2 viewIO toMsg model.recipes
-            ]
+            , selected = Just model.mode
+            , label = Input.labelHidden "表示モード"
+            }
+        , case model.mode of
+            RecipeMode ->
+                Element.row
+                    [ Element.paddingXY 0 5
+                    , Element.spacing 10
+                    ]
+                    [ Lazy.lazy3 viewRecipes toMsg model.products model.recipes
+                    , Element.el
+                        [ Element.width Element.fill
+                        , Element.paddingEach { edges | top = model.scrollY }
+                        , Element.alignTop
+                        ]
+                      <|
+                        Lazy.lazy2 viewIO toMsg model.recipes
+                    ]
+
+            GraphMode ->
+                Element.column
+                    [ Element.width Element.fill
+                    , Element.paddingXY 0 5
+                    , Element.spacing 10
+                    ]
+                    [ Element.html <| Html.div [ Attr.id graphId, Attr.style "width" "100%" ] []
+                    ]
         ]
