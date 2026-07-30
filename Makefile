@@ -4,7 +4,7 @@ ELM_DIR			= src
 SRCS			= $(shell find $(ELM_DIR) -regex '.*\.elm')
 PUBLISH_DIR		= public
 RESOURCE_DIR	= static
-FILES			= index.html
+FILES			= index.html items.csv recipes.csv
 OUTPUT			= static/main.js
 
 RESOURCES		= $(addprefix $(RESOURCE_DIR)/,$(FILES))
