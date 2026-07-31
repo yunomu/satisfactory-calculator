@@ -174,9 +174,17 @@ build recipesCsv itemsCsv =
         (Builder.build itemsBuilder itemsCsv)
 
 
+round2 : Float -> Float
+round2 =
+    (*) 100
+        >> round
+        >> toFloat
+        >> (\v -> v / 100)
+
+
 perMin : Float -> Float -> Float
 perMin amount duration =
-    amount * 60 / duration
+    round2 <| amount * 60 / duration
 
 
 addItem : Item -> Item -> Item
