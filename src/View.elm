@@ -534,12 +534,22 @@ edges =
     }
 
 
+ifNone : Bool -> Element msg -> Element msg
+ifNone cond elem =
+    if cond then
+        Element.none
+
+    else
+        elem
+
+
 viewRecipe : (Msg -> msg) -> List String -> Int -> RecipeView -> Element msg
 viewRecipe toMsg products idx arg =
-    Element.el [] <|
+    Element.el [ Element.width Element.fill ] <|
         Element.column
             [ Border.widthEach { edges | top = 1 }
             , Element.padding 5
+            , Element.width Element.fill
             ]
             [ Element.row [ Element.width Element.fill, Element.spacing 15 ]
                 [ Input.radioRow [ Element.spacing 10 ]
@@ -567,18 +577,19 @@ viewRecipe toMsg products idx arg =
                 , Element.el [ Element.alignRight ] <| viewMul toMsg idx arg.multiple
                 ]
             , Element.row [ Element.spacing 5 ]
-                [ Element.column [] <| List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.output
-                , Element.text "←"
+                [ Element.row [ Element.spacing 3 ]
+                    [ Element.column [ Element.spacing 2 ] <| List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.output
+                    , Element.text "←"
+                    ]
                 , Element.column [ Element.width (px 180) ]
                     [ Element.el [ Element.centerX ] <| Element.text arg.selected.equip
                     , Element.el [ Element.centerX ] <| Element.text <| String.fromFloat arg.selected.duration ++ "秒"
                     ]
-                , Element.text "←"
-                , Element.column
-                    [ Element.spacing 3
-                    ]
-                  <|
-                    List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.input
+                , ifNone (List.isEmpty arg.selected.input) <|
+                    Element.row [ Element.spacing 3 ]
+                        [ Element.text "←"
+                        , Element.column [ Element.spacing 2 ] <| List.map (viewItem toMsg None arg.multiple arg.selected.duration) arg.selected.input
+                        ]
                 ]
             ]
 
@@ -609,9 +620,9 @@ viewIO toMsg input output =
         ]
         [ Element.text "副産物・必要資源"
         , Element.row [ Element.spacing 15 ]
-            [ Element.column [] <| List.map (\i -> viewItem toMsg Consume 1 60 i) output
+            [ Element.column [ Element.spacing 2 ] <| List.map (\i -> viewItem toMsg Consume 1 60 i) output
             , Element.text "←"
-            , Element.column [] <| List.map (\i -> viewItem toMsg Produce 1 60 i) input
+            , Element.column [ Element.spacing 2 ] <| List.map (\i -> viewItem toMsg Produce 1 60 i) input
             ]
         ]
 
