@@ -8,9 +8,6 @@ Parameters:
     Type: String
   GitHubRepo:
     Type: String
-  GitHubBranch:
-    Type: String
-    Default: main
   S3Bucket:
     Type: String
   S3KeyPrefix:
@@ -35,7 +32,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubUser}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}"
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubUser}/${GitHubRepo}:environment:Deploy"
       Policies:
         - PolicyName: Policy
           PolicyDocument:
