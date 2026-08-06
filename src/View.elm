@@ -337,7 +337,7 @@ update msg model =
                     String.concat
                         [ label item.name
                         , "--->|"
-                        , String.fromFloat <| Recipe.perMin item.amount d * mul
+                        , String.fromFloat <| Recipe.perMin item.amount d mul
                         , "|"
                         , eq
                         ]
@@ -346,7 +346,7 @@ update msg model =
                     String.concat
                         [ eq
                         , "--->|"
-                        , String.fromFloat <| Recipe.perMin item.amount d * mul
+                        , String.fromFloat <| Recipe.perMin item.amount d mul
                         , "|"
                         , label item.name
                         ]
@@ -475,10 +475,10 @@ viewItem toMsg direction mul duration item =
                     Element.none
 
                   else
-                    Element.text <| String.fromFloat <| item.amount * mul
+                    Element.text <| String.fromFloat <| Recipe.round3 <| item.amount * mul
                 , Element.el [ Element.alignRight ] <|
                     Element.text <|
-                        (String.fromFloat <| Recipe.perMin item.amount duration * mul)
+                        (String.fromFloat <| Recipe.perMin item.amount duration mul)
                             ++ "/分"
                 ]
             ]

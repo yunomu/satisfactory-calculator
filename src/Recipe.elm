@@ -6,6 +6,7 @@ module Recipe exposing
     , mkProductMap
     , mkSourceMap
     , perMin
+    , round3
     , summary
     )
 
@@ -174,17 +175,17 @@ build recipesCsv itemsCsv =
         (Builder.build itemsBuilder itemsCsv)
 
 
-round2 : Float -> Float
-round2 =
-    (*) 100
+round3 : Float -> Float
+round3 =
+    (*) 1000
         >> round
         >> toFloat
-        >> (\v -> v / 100)
+        >> (\v -> v / 1000)
 
 
-perMin : Float -> Float -> Float
-perMin amount duration =
-    round2 <| amount * 60 / duration
+perMin : Float -> Float -> Float -> Float
+perMin amount duration multiple =
+    round3 <| amount * 60 / duration * multiple
 
 
 addItem : Item -> Item -> Item
@@ -218,11 +219,11 @@ summary : List ( Recipe, Float ) -> ( List Item, List Item )
 summary recipes =
     let
         input =
-            List.map (\( r, m ) -> List.map (\i -> { i | amount = perMin i.amount r.duration * m }) r.input) recipes
+            List.map (\( r, m ) -> List.map (\i -> { i | amount = perMin i.amount r.duration m }) r.input) recipes
                 |> List.foldl mergeItems []
 
         output =
-            List.map (\( r, m ) -> List.map (\i -> { i | amount = perMin i.amount r.duration * m }) r.output) recipes
+            List.map (\( r, m ) -> List.map (\i -> { i | amount = perMin i.amount r.duration m }) r.output) recipes
                 |> List.foldl mergeItems []
     in
     mergeItems output (List.map (\i -> { i | amount = negate i.amount }) input)
