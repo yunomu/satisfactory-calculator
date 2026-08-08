@@ -22,8 +22,26 @@
         app.ports.scrollY.send(window.scrollY);
     });
     app.ports.renderGraph.subscribe(async ([id, def]) => {
-        const { svg } = await mermaid.render('mermaid-svg', def);
-        document.getElementById(id).innerHTML = svg;
+        const svgId = 'mermaid-svg';
+
+        const { svg } = await mermaid.render(svgId, def);
+
+        const container = document.createElement('div');
+        container.style.position = 'absolute';
+        container.style.visibility = 'hidden';
+        container.innerHTML = svg;
+        document.body.appendChild(container);
+
+        const img = document.getElementById(id);
+        const svgElem = document.getElementById(svgId);
+        const rect = svgElem.viewBox.baseVal;
+        img.width = rect.width;
+        img.height = rect.height;
+        img.src = 'data:image/svg+xml;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(svg)));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = rect.width;
+        canvas.height = rect.height;
     });
 </script>
     </body>

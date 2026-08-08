@@ -674,5 +674,5 @@ view toMsg model =
                     ]
                 <|
                     Element.html <|
-                        Html.div [ Attr.id graphId, Attr.style "width" "100%" ] []
+                        Html.div [] [ Html.img [ Attr.id graphId ] [] ]
         ]
