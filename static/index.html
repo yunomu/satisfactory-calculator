@@ -32,16 +32,30 @@
         container.innerHTML = svg;
         document.body.appendChild(container);
 
-        const img = document.getElementById(id);
+
+        const img = new Image();
         const svgElem = document.getElementById(svgId);
         const rect = svgElem.viewBox.baseVal;
         img.width = rect.width;
         img.height = rect.height;
-        img.src = 'data:image/svg+xml;charset=utf-8;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            const encodedSvg = encodeURIComponent(svg).replace(/'/g, "%27").replace(/"/g, "%22");
+            img.src = `data:image/svg+xml;charset=utf-8,${encodedSvg}`;
+        });
 
         const canvas = document.createElement('canvas');
         canvas.width = rect.width;
         canvas.height = rect.height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+
+        document.getElementById(id).src = canvas.toDataURL('image/png');
     });
 </script>
     </body>
